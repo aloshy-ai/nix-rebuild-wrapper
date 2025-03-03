@@ -1,7 +1,7 @@
 # nix-rebuild-wrapper
 
 [![FlakeHub](https://img.shields.io/badge/FlakeHub-nix--rebuild--wrapper-blue)](https://flakehub.com/flake/aloshy-ai/nix-rebuild-wrapper)
-[![GitHub release (latest by date)](https://img.shields.io/github/v/release/aloshy-ai/nix-rebuild-wrapper)](https://github.com/aloshy-ai/nix-rebuild-wrapper/releases)
+[![GitHub release](https://img.shields.io/github/v/release/aloshy-ai/nix-rebuild-wrapper?include_prereleases)](https://github.com/aloshy-ai/nix-rebuild-wrapper/releases)
 [![GitHub license](https://img.shields.io/github/license/aloshy-ai/nix-rebuild-wrapper)](https://github.com/aloshy-ai/nix-rebuild-wrapper/blob/main/LICENSE)
 [![CI](https://github.com/aloshy-ai/nix-rebuild-wrapper/actions/workflows/ci.yml/badge.svg)](https://github.com/aloshy-ai/nix-rebuild-wrapper/actions/workflows/ci.yml)
 
