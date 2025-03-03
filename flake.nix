@@ -54,11 +54,12 @@
             else if platformInfo.isNixOnDroid then "/run/current-system/sw/bin/nix-on-droid"
             else throw "Could not find rebuild command for your platform";
         in {
-          enable = mkOption {
-    type = types.bool;
-    default = true;
-    description = "Enable the seamless flake rebuild command wrapper";
-  };
+          options.system.rebuildWrapper = {
+            enable = mkOption {
+              type = types.bool;
+              default = true;
+              description = "Enable the seamless flake rebuild command wrapper";
+            };
             
             flake = mkOption {
               type = types.nullOr types.attrs;
