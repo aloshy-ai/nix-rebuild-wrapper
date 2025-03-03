@@ -1,0 +1,7 @@
+.devbox
+.direnv
+results
+.DS_Store
+.env*
+!.envrc
+.idea
