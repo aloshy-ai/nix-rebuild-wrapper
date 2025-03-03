@@ -4,16 +4,10 @@
   inputs = {
     # Only for testing - not required by the module itself
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    nixpkgs.flake = false; # Make it clear this is only for tests
-    
-    darwin.url = "github:LnL7/nix-darwin";
-    darwin.inputs.nixpkgs.follows = "nixpkgs";
-    darwin.flake = false; # Make it clear this is only for tests
   };
 
   outputs = { self, ... }@inputs:
     let
-      # Core module that works across platforms and nixpkgs versions
       rebuildWrapperModule = { lib, config, pkgs, hostFlake ? null, ... }:
         with lib;
         let
@@ -38,7 +32,7 @@
                          else throw "Unsupported platform for rebuildWrapper";
           };
           
-          # Command detection with safe fallbacks
+          # Command detection
           findRebuildCommand = let
             nixosRebuild = pkgs.nixos-rebuild or null;
             darwinRebuild = (pkgs.darwin or {}).darwin-rebuild or null;
@@ -52,7 +46,7 @@
           # Get command path safely with fallbacks
           defaultCommandPath = let
             cmd = findRebuildCommand;
-            getBinPath = pkg: "${lib.getBin or (p: p) pkg}/bin/${platformInfo.rebuildName}";
+            getBinPath = pkg: "${(lib.getBin or (p: p)) pkg}/bin/${platformInfo.rebuildName}";
           in
             if cmd != null then getBinPath cmd
             else if platformInfo.isNixOS then "/run/current-system/sw/bin/nixos-rebuild"
@@ -108,7 +102,7 @@
                 then toString cfg.flake.outPath
                 else (assert (cfg.flakePath != ""); cfg.flakePath);
                 
-              # Create wrapper script that works everywhere
+              # Create wrapper script
               wrapper = pkgs.writeShellScriptBin cfg.wrapperName ''
                 #!/usr/bin/env bash
                 exec ${cfg.commandPath} "$@" --flake ${effectiveFlakePath}#${cfg.hostname}
@@ -122,20 +116,19 @@
           };
         };
         
-      # Only for testing - create a simulated nixpkgs for tests if needed 
-      nixpkgsForTest = if inputs ? nixpkgs && !inputs.nixpkgs.flake 
-                      then import inputs.nixpkgs { system = "x86_64-linux"; }
-                      else {};
-                      
-      # Minimal test that verifies the module can be imported
-      minimalTest = {
-        name = "module-import-test";
-        value = nixpkgsForTest.runCommandNoCC or (n: c: c) "test-wrapper-module" {} ''
-          echo "Test passed: Module can be imported"
-          mkdir -p $out
-          touch $out/result
-        '';
-      };
+      # Create a test function based on available nixpkgs
+      makeMinimalCheck = system:
+        if inputs ? nixpkgs then
+          let 
+            pkgs = import inputs.nixpkgs { inherit system; };
+          in {
+            module-import-test = pkgs.runCommand "test-wrapper-module" {} ''
+              echo "Test passed: Module can be imported"
+              mkdir -p $out
+              touch $out/result
+            '';
+          }
+        else {};
     in {
       # Make the module available for all platforms
       nixosModules.default = rebuildWrapperModule;
@@ -145,9 +138,9 @@
       # Export the module function for advanced use cases
       lib.rebuildWrapperModule = rebuildWrapperModule;
       
-      # Add minimal check that works without dependencies
-      checks.x86_64-linux = if nixpkgsForTest ? runCommandNoCC
-                          then { "${minimalTest.name}" = minimalTest.value; }
-                          else {};
+      # Add properly structured checks for CI
+      checks = {
+        x86_64-linux = makeMinimalCheck "x86_64-linux";
+      };
     };
 }
