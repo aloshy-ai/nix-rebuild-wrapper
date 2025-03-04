@@ -8,23 +8,22 @@
 
   outputs = { self, ... }@inputs:
     let
-      # Common module implementation for NixOS and nix-darwin
-      standardModule = { lib, config, pkgs, hostFlake ? null, ... }:
+      # Core module implementation - platform independent
+      makeModule = { platformName, packageOption }:
+        { config, lib, pkgs, ... }@moduleArgs:
         with lib;
         let
           cfg = config.system.rebuildWrapper;
           
-          # Is this Darwin?
-          isDarwin = pkgs.stdenv.hostPlatform.isDarwin;
+          # Safely get flake parameter if passed in specialArgs
+          selfFlake = moduleArgs.self or null;
           
           # Command name based on platform
-          rebuildCommand = if isDarwin then "darwin-rebuild" else "nixos-rebuild";
-          
-          # Create wrapper script
-          wrapperScript = pkgs.writeShellScriptBin cfg.wrapperName ''
-            #!/usr/bin/env bash
-            exec ${cfg.commandPath} "$@" --flake ${cfg.flakePath}#${cfg.hostname}
-          '';
+          rebuildCommand = 
+            if platformName == "nixos" then "nixos-rebuild"
+            else if platformName == "darwin" then "darwin-rebuild"
+            else if platformName == "nix-on-droid" then "nix-on-droid"
+            else throw "Unsupported platform: ${platformName}";
         in {
           options.system.rebuildWrapper = {
             enable = mkOption {
@@ -36,14 +35,14 @@
             flake = mkOption {
               type = types.nullOr types.attrs;
               description = "Reference to the flake (typically 'self')";
-              default = hostFlake;
+              default = selfFlake;
               example = "self";
             };
             
             flakePath = mkOption {
               type = types.str;
               description = "Path to the flake if flake reference not available";
-              default = if cfg.flake != null then toString cfg.flake.outPath else "";
+              default = "";
               example = "/home/user/dotfiles";
             };
             
@@ -52,13 +51,6 @@
               description = "Hostname/identifier for the configuration";
               default = "default";
               example = "laptop";
-            };
-            
-            commandPath = mkOption {
-              type = types.str;
-              description = "Path to the rebuild command";
-              default = "/run/current-system/sw/bin/${rebuildCommand}";
-              example = "/run/current-system/sw/bin/nixos-rebuild";
             };
             
             wrapperName = mkOption {
@@ -70,92 +62,59 @@
           };
           
           config = mkIf cfg.enable {
-            environment.systemPackages = [ wrapperScript ];
-            
+            # Add warning if no flake reference provided
             warnings = mkIf (cfg.flake == null && cfg.flakePath == "") [
-              "rebuildWrapper: neither flake nor flakePath is set; wrapper will not work correctly"
+              "rebuildWrapper: you must set either flake or flakePath for the wrapper to work correctly"
+            ];
+            
+            # Handle different package installation methods
+            ${packageOption} = [
+              (pkgs.writeShellScriptBin cfg.wrapperName ''
+                #!/usr/bin/env bash
+                
+                # Determine flake path
+                FLAKE_PATH="${if cfg.flake != null then toString cfg.flake.outPath else cfg.flakePath}"
+                
+                if [ -z "$FLAKE_PATH" ]; then
+                  echo "Error: No flake path specified. Please set system.rebuildWrapper.flake or system.rebuildWrapper.flakePath." >&2
+                  exit 1
+                fi
+                
+                # Execute the rebuild command
+                exec /run/current-system/sw/bin/${rebuildCommand} "$@" --flake "$FLAKE_PATH"#${cfg.hostname}
+              '')
             ];
           };
         };
-        
-      # Special implementation for nix-on-droid
-      nixOnDroidModule = { lib, config, pkgs, hostFlake ? null, ... }:
-        with lib;
-        let
-          cfg = config.system.rebuildWrapper;
-          
-          # Create wrapper script
-          # Instead of using packages option, we'll use nix-on-droid's installation script option
-          wrapperScript = pkgs.writeScript "nix-on-droid-wrapper" ''
-            #!/usr/bin/env bash
-            exec /run/current-system/sw/bin/nix-on-droid "$@" --flake ${cfg.flakePath}#${cfg.hostname}
-          '';
-        in {
-          options.system.rebuildWrapper = {
-            enable = mkOption {
-              type = types.bool;
-              default = true;
-              description = "Enable the seamless flake rebuild command wrapper";
-            };
-            
-            flake = mkOption {
-              type = types.nullOr types.attrs;
-              description = "Reference to the flake (typically 'self')";
-              default = hostFlake;
-              example = "self";
-            };
-            
-            flakePath = mkOption {
-              type = types.str;
-              description = "Path to the flake if flake reference not available";
-              default = if cfg.flake != null then toString cfg.flake.outPath else "";
-              example = "/home/user/dotfiles";
-            };
-            
-            hostname = mkOption {
-              type = types.str;
-              description = "Hostname/identifier for the configuration";
-              default = "default";
-              example = "laptop";
-            };
-          };
-          
-          config = mkIf cfg.enable {
-            # Add script to user's PATH via nix-on-droid specific option
-            nix-on-droid.installPackages = ''
-              ln -sf ${wrapperScript} $PREFIX/bin/nix-on-droid-wrapper
-            '';
-            
-            warnings = mkIf (cfg.flake == null && cfg.flakePath == "") [
-              "rebuildWrapper: neither flake nor flakePath is set; wrapper will not work correctly"
-            ];
-          };
-        };
-        
-      # Create a test function based on available nixpkgs
-      makeMinimalCheck = system:
-        if inputs ? nixpkgs then
-          let 
-            pkgs = import inputs.nixpkgs { inherit system; };
-          in {
-            module-import-test = pkgs.runCommand "test-wrapper-module" {} ''
-              echo "Test passed: Module can be imported"
-              mkdir -p $out
-              touch $out/result
-            '';
-          }
-        else {};
     in {
-      # Export standard module for NixOS and nix-darwin
-      nixosModules.default = standardModule;
-      darwinModules.default = standardModule;
-      
-      # Export specialized module for nix-on-droid
-      nixOnDroidModules.default = nixOnDroidModule;
-      
-      # Add properly structured checks for CI
-      checks = {
-        x86_64-linux = makeMinimalCheck "x86_64-linux";
+      # Export modules for different platforms with the correct package option
+      nixosModules.default = makeModule { 
+        platformName = "nixos"; 
+        packageOption = "environment.systemPackages";
       };
+      
+      darwinModules.default = makeModule { 
+        platformName = "darwin"; 
+        packageOption = "environment.systemPackages";
+      };
+      
+      nixOnDroidModules.default = makeModule { 
+        platformName = "nix-on-droid"; 
+        packageOption = "home.packages";
+      };
+      
+      # Doc string to help users
+      meta.description = ''
+        A module to create wrapper commands for rebuild operations (nixos-rebuild, darwin-rebuild, nix-on-droid)
+        that automatically add the --flake flag.
+        
+        To use this module effectively:
+        1. Import it in your configuration
+        2. Pass the 'self' flake reference via specialArgs: specialArgs = { self = self; };
+        3. Enable the module: system.rebuildWrapper.enable = true;
+        
+        If you can't pass 'self' via specialArgs, you can manually set the flake path:
+        system.rebuildWrapper.flakePath = "/path/to/your/flake";
+      '';
     };
 }
