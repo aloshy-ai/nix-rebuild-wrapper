@@ -8,51 +8,27 @@
 
   outputs = { self, ... }@inputs:
     let
-      rebuildWrapperModule = { lib, config, pkgs, hostFlake ? null, ... }:
+      # Common module options shared between all platforms
+      makeRebuildWrapperModule = platformName: rebuildCommand: 
+        { lib, config, pkgs, hostFlake ? null, ... }:
         with lib;
         let
           cfg = config.system.rebuildWrapper;
           
-          # Platform detection
-          platformInfo = rec {
-            isNixOS = pkgs.stdenv.hostPlatform.isLinux && 
-                      (builtins.pathExists "/etc/nixos" || config.system.build ? toplevel);
-            isDarwin = pkgs.stdenv.hostPlatform.isDarwin;
-            isNixOnDroid = pkgs.stdenv.hostPlatform.isLinux && 
-             (builtins.pathExists "/data/data/com.termux" || config ? nix-on-droid || config.environment.nix-on-droid.enable or false);
-                          
-            platform = if isNixOS then "nixos"
-                      else if isDarwin then "darwin"
-                      else if isNixOnDroid then "nix-on-droid"
-                      else "unknown";
-            
-            rebuildName = if isNixOS then "nixos-rebuild"
-                         else if isDarwin then "darwin-rebuild"
-                         else if isNixOnDroid then "nix-on-droid"
-                         else throw "Unsupported platform for rebuildWrapper";
-          };
-          
-          # Command detection
-          findRebuildCommand = let
-            nixosRebuild = pkgs.nixos-rebuild or null;
-            darwinRebuild = (pkgs.darwin or {}).darwin-rebuild or null;
-            nixOnDroidRebuild = pkgs.nix-on-droid or null;
-          in
-            if platformInfo.isNixOS && nixosRebuild != null then nixosRebuild
-            else if platformInfo.isDarwin && darwinRebuild != null then darwinRebuild
-            else if platformInfo.isNixOnDroid && nixOnDroidRebuild != null then nixOnDroidRebuild
+          # Command path logic based on platform
+          findRebuildPackage = 
+            if platformName == "nixos" then pkgs.nixos-rebuild or null
+            else if platformName == "darwin" then (pkgs.darwin or {}).darwin-rebuild or null
+            else if platformName == "nix-on-droid" then pkgs.nix-on-droid or null
             else null;
 
           # Get command path safely with fallbacks
           defaultCommandPath = let
-            cmd = findRebuildCommand;
-            getBinPath = pkg: "${(lib.getBin or (p: p)) pkg}/bin/${platformInfo.rebuildName}";
+            cmd = findRebuildPackage;
+            getBinPath = pkg: "${(lib.getBin or (p: p)) pkg}/bin/${rebuildCommand}";
           in
             if cmd != null then getBinPath cmd
-            else if platformInfo.isNixOS then "/run/current-system/sw/bin/nixos-rebuild"
-            else if platformInfo.isDarwin then "/run/current-system/sw/bin/darwin-rebuild"
-            else if platformInfo.isNixOnDroid then "/run/current-system/sw/bin/nix-on-droid"
-            else throw "Could not find rebuild command for your platform";
+            else "/run/current-system/sw/bin/${rebuildCommand}";
         in {
           options.system.rebuildWrapper = {
             enable = mkOption {
@@ -87,13 +63,13 @@
               type = types.str;
               description = "Path to the rebuild command";
               default = defaultCommandPath;
-              example = "/run/current-system/sw/bin/nixos-rebuild";
+              example = "/run/current-system/sw/bin/${rebuildCommand}";
             };
             
             wrapperName = mkOption {
               type = types.str;
               description = "Name for the wrapper command";
-              default = platformInfo.rebuildName;
+              default = rebuildCommand;
               example = "rebuild";
             };
           };
@@ -134,13 +110,13 @@
           }
         else {};
     in {
-      # Make the module available for all platforms
-      nixosModules.default = rebuildWrapperModule;
-      darwinModules.default = rebuildWrapperModule;
-      nixOnDroidModules.default = rebuildWrapperModule;
+      # Make platform-specific modules available
+      nixosModules.default = makeRebuildWrapperModule "nixos" "nixos-rebuild";
+      darwinModules.default = makeRebuildWrapperModule "darwin" "darwin-rebuild";
+      nixOnDroidModules.default = makeRebuildWrapperModule "nix-on-droid" "nix-on-droid";
       
       # Export the module function for advanced use cases
-      lib.rebuildWrapperModule = rebuildWrapperModule;
+      lib.makeRebuildWrapperModule = makeRebuildWrapperModule;
       
       # Add properly structured checks for CI
       checks = {
