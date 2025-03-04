@@ -8,25 +8,19 @@
 
   outputs = { self, ... }@inputs:
     let
-      # Common module logic
-      rebuildWrapperModule = { lib, config, pkgs, hostFlake ? null, ... }:
+      # Common module implementation for NixOS and nix-darwin
+      standardModule = { lib, config, pkgs, hostFlake ? null, ... }:
         with lib;
         let
           cfg = config.system.rebuildWrapper;
           
-          # Detect if we're in nix-on-droid
-          isNixOnDroid = config ? nix-on-droid;
+          # Is this Darwin?
+          isDarwin = pkgs.stdenv.hostPlatform.isDarwin;
           
-          # Determine command based on simple platform checks
-          rebuildCommand = 
-            if pkgs.stdenv.hostPlatform.isDarwin then "darwin-rebuild"
-            else if isNixOnDroid then "nix-on-droid"
-            else "nixos-rebuild";
-
-          # Find command path with fallbacks
-          defaultCommandPath = "/run/current-system/sw/bin/${rebuildCommand}";
+          # Command name based on platform
+          rebuildCommand = if isDarwin then "darwin-rebuild" else "nixos-rebuild";
           
-          # Create the wrapper script
+          # Create wrapper script
           wrapperScript = pkgs.writeShellScriptBin cfg.wrapperName ''
             #!/usr/bin/env bash
             exec ${cfg.commandPath} "$@" --flake ${cfg.flakePath}#${cfg.hostname}
@@ -60,11 +54,10 @@
               example = "laptop";
             };
             
-            # Advanced options
             commandPath = mkOption {
               type = types.str;
               description = "Path to the rebuild command";
-              default = defaultCommandPath;
+              default = "/run/current-system/sw/bin/${rebuildCommand}";
               example = "/run/current-system/sw/bin/nixos-rebuild";
             };
             
@@ -77,29 +70,25 @@
           };
           
           config = mkIf cfg.enable {
-            # Add warning if no flake reference provided
+            environment.systemPackages = [ wrapperScript ];
+            
             warnings = mkIf (cfg.flake == null && cfg.flakePath == "") [
               "rebuildWrapper: neither flake nor flakePath is set; wrapper will not work correctly"
             ];
-            
-            # Use the appropriate package installation method
-            ${if isNixOnDroid then "packages" else "environment.systemPackages"} = [ wrapperScript ];
           };
         };
         
-      # Create a specialized Nix-on-Droid module
+      # Special implementation for nix-on-droid
       nixOnDroidModule = { lib, config, pkgs, hostFlake ? null, ... }:
         with lib;
         let
           cfg = config.system.rebuildWrapper;
           
-          # Determine command path with fallbacks
-          defaultCommandPath = "/run/current-system/sw/bin/nix-on-droid";
-          
-          # Create the wrapper script
-          wrapperScript = pkgs.writeShellScriptBin cfg.wrapperName ''
+          # Create wrapper script
+          # Instead of using packages option, we'll use nix-on-droid's installation script option
+          wrapperScript = pkgs.writeScript "nix-on-droid-wrapper" ''
             #!/usr/bin/env bash
-            exec ${cfg.commandPath} "$@" --flake ${cfg.flakePath}#${cfg.hostname}
+            exec /run/current-system/sw/bin/nix-on-droid "$@" --flake ${cfg.flakePath}#${cfg.hostname}
           '';
         in {
           options.system.rebuildWrapper = {
@@ -129,31 +118,17 @@
               default = "default";
               example = "laptop";
             };
-            
-            # Advanced options
-            commandPath = mkOption {
-              type = types.str;
-              description = "Path to the rebuild command";
-              default = defaultCommandPath;
-              example = "/run/current-system/sw/bin/nixos-rebuild";
-            };
-            
-            wrapperName = mkOption {
-              type = types.str;
-              description = "Name for the wrapper command";
-              default = "nix-on-droid";
-              example = "rebuild";
-            };
           };
           
           config = mkIf cfg.enable {
-            # Add warning if no flake reference provided
+            # Add script to user's PATH via nix-on-droid specific option
+            nix-on-droid.installPackages = ''
+              ln -sf ${wrapperScript} $PREFIX/bin/nix-on-droid-wrapper
+            '';
+            
             warnings = mkIf (cfg.flake == null && cfg.flakePath == "") [
               "rebuildWrapper: neither flake nor flakePath is set; wrapper will not work correctly"
             ];
-            
-            # Use packages for nix-on-droid
-            packages = [ wrapperScript ];
           };
         };
         
@@ -172,8 +147,8 @@
         else {};
     in {
       # Export standard module for NixOS and nix-darwin
-      nixosModules.default = rebuildWrapperModule;
-      darwinModules.default = rebuildWrapperModule;
+      nixosModules.default = standardModule;
+      darwinModules.default = standardModule;
       
       # Export specialized module for nix-on-droid
       nixOnDroidModules.default = nixOnDroidModule;
