@@ -19,7 +19,7 @@
                       (builtins.pathExists "/etc/nixos" || config.system.build ? toplevel);
             isDarwin = pkgs.stdenv.hostPlatform.isDarwin;
             isNixOnDroid = pkgs.stdenv.hostPlatform.isLinux && 
-                          (builtins.pathExists "/data/data/com.termux" || config.environment.nix-on-droid.enable or false);
+             (builtins.pathExists "/data/data/com.termux" || config ? nix-on-droid || config.environment.nix-on-droid.enable or false);
                           
             platform = if isNixOS then "nixos"
                       else if isDarwin then "darwin"
