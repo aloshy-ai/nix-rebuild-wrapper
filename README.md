@@ -1,15 +1,16 @@
-# nix-rebuild-wrapper
+# NIX-REBUILD-WRAPPER
 
-[![FlakeHub](https://img.shields.io/badge/FlakeHub-nix--rebuild--wrapper-blue)](https://flakehub.com/flake/aloshy-ai/nix-rebuild-wrapper)
-[![GitHub release](https://img.shields.io/github/v/release/aloshy-ai/nix-rebuild-wrapper?include_prereleases)](https://github.com/aloshy-ai/nix-rebuild-wrapper/releases)
-[![GitHub license](https://img.shields.io/github/license/aloshy-ai/nix-rebuild-wrapper)](https://github.com/aloshy-ai/nix-rebuild-wrapper/blob/main/LICENSE)
-[![CI](https://github.com/aloshy-ai/nix-rebuild-wrapper/actions/workflows/ci.yml/badge.svg)](https://github.com/aloshy-ai/nix-rebuild-wrapper/actions/workflows/ci.yml)
+[![](https://img.shields.io/badge/aloshy.🅰🅸-000000.svg?style=for-the-badge)](https://aloshy.ai)
+[![Powered By Nix](https://img.shields.io/badge/NIX-POWERED-5277C3.svg?style=for-the-badge&logo=nixos)](https://nixos.org)
+[![Build Status](https://img.shields.io/badge/BUILD-PASSING-success.svg?style=for-the-badge&logo=github)](https://github.com/aloshy-ai/nix-rebuild-wrapper/actions)
+[![Platform](https://img.shields.io/badge/PLATFORM-UNIVERSAL-blueviolet.svg?style=for-the-badge)](https://github.com/aloshy-ai/nix-rebuild-wrapper)
+[![License](https://img.shields.io/badge/LICENSE-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 
-A cross-platform Nix module that creates wrapper commands for `nixos-rebuild`, `darwin-rebuild`, and `nix-on-droid` with automatic flake path detection, eliminating the need to repeatedly specify `--flake` flags.
+A cross-platform Nix module that creates rebuild command wrappers for NixOS, nix-darwin, and nix-on-droid with automatic flake path detection, eliminating the need to repeatedly specify --flake flags.
 
 ## Problem
 
-When using Nix flakes, you need to specify the `--flake` flag with every rebuild command:
+When using Nix flakes, you need to specify the --flake flag with every rebuild command:
 
 ```bash
 # Traditional approach requires the full path and hostname each time
@@ -22,7 +23,7 @@ This becomes tedious, especially when you frequently update your configuration.
 
 ## Solution
 
-This module creates a wrapper command that automatically adds the `--flake` flag with the correct path and hostname:
+This module creates a wrapper command that automatically adds the --flake flag with the correct path and hostname:
 
 ```bash
 # After installing this module, you can simply run:
@@ -154,7 +155,7 @@ The module:
 
 1. Detects your platform (NixOS, nix-darwin, or nix-on-droid)
 2. Identifies the appropriate rebuild command
-3. Creates a wrapper script that automatically adds the `--flake` argument
+3. Creates a wrapper script that automatically adds the --flake argument
 4. Adds the wrapper to your system packages
 
 ## Compatibility
